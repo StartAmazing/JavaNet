@@ -1,9 +1,6 @@
 package com.ll.chapter2.useapi;
 
-import java.io.File;
-import java.io.FileInputStream;
-import java.io.FileOutputStream;
-import java.io.IOException;
+import java.io.*;
 import java.nio.ByteBuffer;
 import java.nio.channels.FileChannel;
 
@@ -29,7 +26,7 @@ public class TestFileChannel {
      * public abstract FileChannel position(long newPosition) 方法的作
      * 用是设置此通道的文件位置
      */
-    //1. 验证 inte write(ByteBuffer src) 是从通道的当前位置开始写入的
+    //1. 验证 int write(ByteBuffer src) 是从【通道的当前位置】开始写入的
     public static void testWriteAndPos1() throws IOException, InterruptedException {
 
         fos = new FileOutputStream(new File("D:\\abc\\a.txt"));
@@ -53,7 +50,7 @@ public class TestFileChannel {
         fos.close();
     }
 
-    //2. 验证 int write(ByteBuffer src) 方法将 ByteBuffer 的 remaining 字节写入
+    //2. 验证 int write(ByteBuffer src) 方法将【 ByteBuffer 的 remaining 】字节写入
     public static void testWriteAndPos2() throws IOException, InterruptedException {
         fos = new FileOutputStream(new File("D:\\abc\\a.txt"));
         fileChannel = fos.getChannel();
@@ -158,7 +155,7 @@ public class TestFileChannel {
         fis.close();
     }
 
-    // 2. 验证int read(ByteBuffer dst)方法是从通道的当前位置开始读取的
+    // 2. 验证int read(ByteBuffer dst)方法是从【通道的当前位置】开始读取的
     public static void testReadAndPos2() throws IOException, InterruptedException {
         fis = new FileInputStream(new File("D:\\abc\\b.txt"));
         fileChannel = fis.getChannel();
@@ -176,7 +173,7 @@ public class TestFileChannel {
         fis.close();
     }
 
-    //3. 验证int read(ByteBuffer src)方法将字节放入ByteBuffer当前位置
+    //3. 验证int read(ByteBuffer src)方法将字节放入【ByteBuffer当前位置】
     public static void testReadAndPos3() throws IOException, InterruptedException {
         fis = new FileInputStream(new File("D:\\abc\\b.txt"));
         fileChannel = fis.getChannel();
@@ -351,22 +348,377 @@ public class TestFileChannel {
         fis.close();
     }
 
+    public static void testBatchReadAndPos1() throws Exception {
+        fis = new FileInputStream(new File("D:\\abc\\2_4_4.txt"));
+        fileChannel = fis.getChannel();
+
+        ByteBuffer byteBuffer1 = ByteBuffer.allocate(2);
+        ByteBuffer byteBuffer2 = ByteBuffer.allocate(2);
+        ByteBuffer[] byteBufferArray = new ByteBuffer[]{byteBuffer1, byteBuffer2};
+
+        long readLength = fileChannel.read(byteBufferArray);
+        System.out.println(readLength);     //获取4个字节
+        byteBuffer1.clear();
+        byteBuffer2.clear();
+
+        readLength = fileChannel.read(byteBufferArray);
+        System.out.println(readLength);      //获取一个字节
+        byteBuffer1.clear();
+        byteBuffer2.clear();
+
+        readLength = fileChannel.read(byteBufferArray);
+        System.out.println(readLength);     //到达流的末尾为-1
+        byteBuffer1.clear();
+        byteBuffer2.clear();
+
+        readLength = fileChannel.read(byteBufferArray);
+        System.out.println(readLength);
+        byteBuffer1.clear();
+        byteBuffer2.clear();
+
+        fileChannel.close();
+        fis.close();
+    }
+
+    // 验证批量从管道中读入数据是从管道的当前位置开始读取
+    public static void testBatchReadAndPos2() throws Exception {
+        fis = new FileInputStream(new File("D:\\abc\\2_4_4.txt"));
+        fileChannel = fis.getChannel();
+        fileChannel.position(2);
+
+        ByteBuffer byteBuffer1 = ByteBuffer.allocate(2);
+        ByteBuffer byteBuffer2 = ByteBuffer.allocate(2);
+        ByteBuffer[] byteBufferArray = new ByteBuffer[]{byteBuffer1, byteBuffer2};
+
+        long readLength = fileChannel.read(byteBufferArray);
+        System.out.println(readLength);     //获取3个字节
+
+        for (int i = 0; i < byteBufferArray.length; i++) {
+            byte[] array = byteBufferArray[i].array();
+            for (int j = 0; j < array.length; j++) {
+                System.out.print((char) array[j]);
+            }
+            System.out.println();
+        }
+
+        fileChannel.close();
+        fis.close();
+    }
+
+    // 验证从管道中读取数据放入byteBuffer的当前位置
+    public static void testBatchReadAndPos3() throws Exception {
+        fis = new FileInputStream(new File("D:\\abc\\2_4_4.txt"));
+        fileChannel = fis.getChannel();
+        fileChannel.position(2);
+
+        ByteBuffer byteBuffer1 = ByteBuffer.allocate(2);
+        byteBuffer1.position(1);
+        ByteBuffer byteBuffer2 = ByteBuffer.allocate(2);
+        byteBuffer2.position(1);
+        ByteBuffer[] byteBufferArray = new ByteBuffer[]{byteBuffer1, byteBuffer2};
+
+        long readLength = fileChannel.read(byteBufferArray);
+        System.out.println(readLength);     // 获取2个字节
+
+        for (int i = 0; i < byteBufferArray.length; i++) {
+            byte[] array = byteBufferArray[i].array();
+            for (int j = 0; j < array.length; j++) {
+                System.out.print((char) array[j]);
+            }
+            System.out.println();
+        }
+
+        fileChannel.close();
+        fis.close();
+    }
+
+    // 验证批量读取具有同步特性
+    public static void testBatchReadAndPos4() throws Exception {
+        fis = new FileInputStream(new File("D:\\abc\\2_4_4.txt"));
+        fileChannel = fis.getChannel();
+
+        for (int i = 0; i < 10; i++) {
+            new Thread(() -> {
+                try {
+                    ByteBuffer byteBuffer1 = ByteBuffer.allocate(8);
+                    ByteBuffer byteBuffer2 = ByteBuffer.allocate(9);
+                    ByteBuffer[] byteBuffers = new ByteBuffer[]{byteBuffer1, byteBuffer2};
+
+                    long read = fileChannel.read(byteBuffers);
+//                    System.out.println("Thread --- " + Thread.currentThread().getName() + " read length from file: " + read);
+
+                    while (read != -1) {
+                        synchronized (TestFileChannel.class) {
+                            for (int j = 0; j < byteBuffers.length; j++) {
+                                byte[] array = byteBuffers[j].array();
+                                for (int k = 0; k < array.length; k++) {
+                                    System.out.print((char) array[k]);
+                                }
+//                                System.out.println();
+                            }
+                        }
+                        byteBuffer1.clear();
+                        byteBuffer2.clear();
+                        read = fileChannel.read(byteBuffers);
+                    }
+                } catch (Exception e) {
+                    e.printStackTrace();
+                }
+            }).start();
+
+            new Thread(() -> {
+                try {
+                    ByteBuffer byteBuffer1 = ByteBuffer.allocate(8);
+                    ByteBuffer byteBuffer2 = ByteBuffer.allocate(9);
+                    ByteBuffer[] byteBuffers = new ByteBuffer[]{byteBuffer1, byteBuffer2};
+
+                    long read = fileChannel.read(byteBuffers);
+//                    System.out.println("Thread --- " + Thread.currentThread().getName() + " read length from file: " + read);
+
+                    while (read != -1) {
+                        synchronized (TestFileChannel.class) {
+                            for (int j = 0; j < byteBuffers.length; j++) {
+                                byte[] array = byteBuffers[j].array();
+                                for (int k = 0; k < array.length; k++) {
+                                    System.out.print((char) array[k]);
+                                }
+//                                System.out.println();
+                            }
+                        }
+                        byteBuffer1.clear();
+                        byteBuffer2.clear();
+                        read = fileChannel.read(byteBuffers);
+                    }
+                } catch (Exception e) {
+                    e.printStackTrace();
+                }
+            }).start();
+        }
+
+        Thread.sleep(10000);
+        fileChannel.close();
+        fis.close();
+    }
+
+    // 如果从通道中读出的数据的数量比当前缓冲区中的容量大，会出现什么情况
+    public static void testBatchReadAndPos5() throws Exception {
+        fis = new FileInputStream(new File("D:\\abc\\2_4_4.txt"));
+        fileChannel = fis.getChannel();
+
+        ByteBuffer byteBuffer1 = ByteBuffer.allocate(1);
+        ByteBuffer byteBuffer2 = ByteBuffer.allocate(1);
+        ByteBuffer[] byteBufferArray = new ByteBuffer[]{byteBuffer1, byteBuffer2};
+
+        long readLength = fileChannel.read(byteBufferArray);
+        System.out.println(readLength);     // 获取2个字节
+
+        System.out.println(fileChannel.position());
+        for (int i = 0; i < byteBufferArray.length; i++) {
+            byte[] array = byteBufferArray[i].array();
+            for (int j = 0; j < array.length; j++) {
+                System.out.print((char) array[j]);
+            }
+            System.out.println();
+        }
+
+        fileChannel.close();
+        fis.close();
+    }
+
+    // 如果从通道中读出的数据的数量比当前缓冲区中的容量大，会放入remaining空间中
+    public static void testBatchReadAndPos6() throws Exception {
+        fis = new FileInputStream(new File("D:\\abc\\2_4_4.txt"));
+        fileChannel = fis.getChannel();
+
+        ByteBuffer byteBuffer1 = ByteBuffer.allocate(2);
+        byteBuffer1.position(1);
+        ByteBuffer byteBuffer2 = ByteBuffer.allocate(2);
+        byteBuffer2.position(1);
+        ByteBuffer[] byteBufferArray = new ByteBuffer[]{byteBuffer1, byteBuffer2};
+
+        long readLength = fileChannel.read(byteBufferArray);
+        System.out.println(readLength);     // 获取2个字节
+
+        System.out.println(fileChannel.position());
+        for (int i = 0; i < byteBufferArray.length; i++) {
+            byte[] array = byteBufferArray[i].array();
+            for (int j = 0; j < array.length; j++) {
+                System.out.print((char) array[j]);
+            }
+            System.out.println();
+        }
+
+        fileChannel.close();
+        fis.close();
+    }
+
+    // 验证写入file是从当前通道当前位置开始写入的
+    public static void testPartBatchWriteAndPos1() throws Exception {
+        fos = new FileOutputStream(new File("D:\\abc\\2_4_5.txt"));
+        fileChannel = fos.getChannel();
+
+        ByteBuffer byteBuffer1 = ByteBuffer.wrap("abcdefg".getBytes());
+        ByteBuffer byteBuffer2 = ByteBuffer.wrap("ABCDEFG".getBytes());
+        byteBuffer1.position(3);
+        byteBuffer2.position(3);
+
+
+        ByteBuffer[] byteBuffers = new ByteBuffer[]{byteBuffer1, byteBuffer2};
+        fileChannel.write(ByteBuffer.wrap("ssssss".getBytes()));
+        fileChannel.position(2);
+
+        long write = fileChannel.write(byteBuffers, 0, 1);
+        System.out.println("write length: " + write);
+
+        fileChannel.close();
+        fos.close();
+    }
+
+    // 验证同步性
+    public static void testPartBatchWriteAndPos2() throws Exception {
+        fos = new FileOutputStream(new File("D:\\abc\\2_4_5.txt"));
+        fileChannel = fos.getChannel();
+
+        for (int i = 0; i < 10; i++) {
+            new Thread(() -> {
+                ByteBuffer byteBuffer1 = ByteBuffer.wrap("aaaaa1\r\n".getBytes());
+                ByteBuffer byteBuffer2 = ByteBuffer.wrap("aaaaa2\r\n".getBytes());
+                ByteBuffer[] byteBuffers = new ByteBuffer[]{byteBuffer1, byteBuffer2};
+                try {
+                    fileChannel.write(byteBuffers, 0, 2);
+                } catch (Exception e) {
+                    e.printStackTrace();
+                }
+            }).start();
+
+            new Thread(() -> {
+                ByteBuffer byteBuffer1 = ByteBuffer.wrap("bbbbbb1\r\n".getBytes());
+                ByteBuffer byteBuffer2 = ByteBuffer.wrap("bbbbbb2\r\n".getBytes());
+                ByteBuffer[] byteBuffers = new ByteBuffer[]{byteBuffer1, byteBuffer2};
+                try {
+                    fileChannel.write(byteBuffers, 0, 2);
+                } catch (Exception e) {
+                    e.printStackTrace();
+                }
+            }).start();
+        }
+
+        Thread.sleep(5000);
+        fileChannel.close();
+        fos.close();
+    }
+
+    public static void testWriteWithChannelPos1() throws Exception {
+        fos = new FileOutputStream(new File("D:\\abc\\2_4_7.txt"));
+        fileChannel = fos.getChannel();
+
+        ByteBuffer byteBuffer = ByteBuffer.wrap("abcde".getBytes());
+        byteBuffer.position(2);
+        try {
+            fileChannel.write(byteBuffer);
+            byteBuffer.rewind();
+//            fileChannel.position(18);
+            System.out.println("Pre: " + fileChannel.position());
+            fileChannel.write(byteBuffer, 2); // 这种方法使用的是绝对位置，使用前后fileChannel的位置不变
+            System.out.println("post: " + fileChannel.position());
+        } catch (Exception e) {
+            e.printStackTrace();
+        }
+
+        fileChannel.close();
+        fos.close();
+    }
+
+    // 验证同步性， 这里是哪个线程后运行文件中就是哪个线程的数据
+    public static void testWriteWithChannelPos2() throws Exception {
+        fos = new FileOutputStream(new File("D:\\abc\\2_4_7.txt"));
+        fileChannel = fos.getChannel();
+
+        Thread thread1 = new Thread(() -> {
+            try {
+                ByteBuffer byteBuffer = ByteBuffer.wrap("12345".getBytes());
+                System.out.println("线程1执行...");
+                fileChannel.write(byteBuffer);
+            } catch (Exception e) {
+                e.printStackTrace();
+            }
+        });
+
+        Thread thread2 = new Thread(() -> {
+            try {
+                ByteBuffer byteBuffer = ByteBuffer.wrap("67890".getBytes());
+                System.out.println("线程2执行...");
+                fileChannel.write(byteBuffer);
+            } catch (Exception e) {
+                e.printStackTrace();
+            }
+        });
+
+        thread2.start();
+        thread1.start();
+
+        Thread.sleep(3000);
+        fileChannel.close();
+        fos.close();
+    }
+
+    public static void testSetPosAndGetSize1() throws Exception {
+        fos = new FileOutputStream(new File("D:\\abc\\2_4_9.txt"));
+        fileChannel = fos.getChannel();
+
+        ByteBuffer byteBuffer1 = ByteBuffer.wrap("abcd".getBytes());
+        ByteBuffer byteBuffer2 = ByteBuffer.wrap("cde".getBytes());
+
+        fileChannel.position(10);
+        System.out.println("A " + "position = " + fileChannel.position() + ", and size = " + fileChannel.size());
+        fileChannel.write(byteBuffer1);
+        System.out.println("B " + "position = " + fileChannel.position() + ", and size = " + fileChannel.size());
+        fileChannel.position(2);
+        System.out.println("C " + "position = " + fileChannel.position() + ", and size = " + fileChannel.size());
+        fileChannel.write(byteBuffer2);
+        System.out.println("D " + "position = " + fileChannel.position() + ", and size = " + fileChannel.size());
+
+        fileChannel.close();
+        fos.close();
+    }
+
+    public static void testTruncate1() {
+
+    }
+
     public static void main(String[] args) throws Exception {
-        System.out.println("----------------------- use write and position ---------------------");
-        testWriteAndPos1();
-        System.out.println();
-        testWriteAndPos2();
-        System.out.println();
-        testWriteAndPos3();
-        System.out.println("----------------------- use read and position ---------------------");
-        testReadAndPos1();
-        testReadAndPos2();
-        testReadAndPos3();
-        testReadAndPos4();
-        testReadAndPos5();
-        System.out.println("------------------------ batch write --------------------------");
-        testBatchWriteAndPos1();
-        testBatchWriteAndPos2();
-        testBatchWriteAndPos3();
+//        System.out.println("----------------------- use write and position ---------------------");
+//        testWriteAndPos1();
+//        System.out.println();
+//        testWriteAndPos2();
+//        System.out.println();
+//        testWriteAndPos3();
+//        System.out.println("----------------------- use read and position ---------------------");
+//        testReadAndPos1();
+//        testReadAndPos2();
+//        testReadAndPos3();
+//        testReadAndPos4();
+//        testReadAndPos5();
+//        System.out.println("------------------------ batch write --------------------------");
+//        testBatchWriteAndPos1();
+//        testBatchWriteAndPos2();
+//        testBatchWriteAndPos3();
+//        System.out.println("------------------------ batch read --------------------------");
+//        testBatchReadAndPos1();
+//        testBatchReadAndPos2();
+//        testBatchReadAndPos3();
+//        testBatchReadAndPos4();
+//        testBatchReadAndPos5();
+//        testBatchReadAndPos6();
+//        System.out.println("------------------------ 2.4.5  part batch write --------------------------");
+//        testPartBatchWriteAndPos1();
+//        testPartBatchWriteAndPos2();
+//        System.out.println("------------------------ 2.4.7 write with position --------------------------");
+//        testWriteWithChannelPos1();
+//        testWriteWithChannelPos2();
+//        System.out.println("------------------------ 2.4.9 set position and get size --------------------------");
+//        testSetPosAndGetSize1();
+        System.out.println("------------------------ 2.4.10 truncate bytebuffer --------------------------");
+        testTruncate1();
     }
 }
