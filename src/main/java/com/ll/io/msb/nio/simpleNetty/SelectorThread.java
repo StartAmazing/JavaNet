@@ -12,7 +12,7 @@ import java.util.concurrent.LinkedBlockingDeque;
  * @create 2021/3/12
  *
  *
- * 没每个线程对应一个selector
+ * 每个线程对应一个selector
  * 多线程情况下，该主机，该程序的并发客户端被分配到多个selector上
  * 注意，每个客户端，只绑定到其中一个selector
  * 其实不会有交互问题
@@ -129,5 +129,9 @@ public class SelectorThread implements Runnable {
             e.printStackTrace();
         }
 
+    }
+
+    public void setWorker(SelectorThreadGroup stgWorker) {
+        this.group = stgWorker;
     }
 }
