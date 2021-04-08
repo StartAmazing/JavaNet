@@ -10,20 +10,25 @@ import java.util.concurrent.LinkedBlockingDeque;
 /**
  * @author LL
  * @create 2021/3/12
- *
- *
+ * <p>
+ * <p>
  * 每个线程对应一个selector
  * 多线程情况下，该主机，该程序的并发客户端被分配到多个selector上
  * 注意，每个客户端，只绑定到其中一个selector
  * 其实不会有交互问题
  */
-public class SelectorThread implements Runnable {
+public class SelectorThread extends ThreadLocal<LinkedBlockingDeque<Channel>> implements Runnable {
 
     Selector selector = null;
-    LinkedBlockingDeque<Channel> channelQueue = new LinkedBlockingDeque<>();
+    LinkedBlockingDeque<Channel> channelQueue = get();
     SelectorThreadGroup group;
 
-    SelectorThread(SelectorThreadGroup group){
+    @Override
+    protected LinkedBlockingDeque<Channel> initialValue() {
+        return new LinkedBlockingDeque<>();
+    }
+
+    SelectorThread(SelectorThreadGroup group) {
         this.group = group;
         try {
             selector = Selector.open();
@@ -63,7 +68,7 @@ public class SelectorThread implements Runnable {
                     while (iterator.hasNext()) {        // 线性处理
                         SelectionKey key = iterator.next();
                         iterator.remove();
-                        if(key.isAcceptable()) {        // 复杂，就是接收客户端的过程（接收之后，要注册， 多线程模型下，新的客户端注册到哪个selector上？）
+                        if (key.isAcceptable()) {        // 复杂，就是接收客户端的过程（接收之后，要注册， 多线程模型下，新的客户端注册到哪个selector上？）
                             acceptHandler(key);
                         } else if (key.isReadable()) {
                             readHandler(key);
@@ -74,12 +79,12 @@ public class SelectorThread implements Runnable {
                 }
 
                 // 3. 处理一些task
-                if(!channelQueue.isEmpty()) {
+                if (!channelQueue.isEmpty()) {
                     Channel channel = channelQueue.take();
                     if (channel instanceof ServerSocketChannel) {
                         ServerSocketChannel serverChannel = (ServerSocketChannel) channel;
                         serverChannel.register(selector, SelectionKey.OP_ACCEPT);
-                    } else if(channel instanceof SocketChannel) {
+                    } else if (channel instanceof SocketChannel) {
                         SocketChannel rwChannel = (SocketChannel) channel;
                         ByteBuffer buffer = ByteBuffer.allocateDirect(4096);
                         rwChannel.register(selector, SelectionKey.OP_READ, buffer);
@@ -93,7 +98,7 @@ public class SelectorThread implements Runnable {
 
     private void readHandler(SelectionKey key) {
         ByteBuffer buffer = (ByteBuffer) key.attachment();
-        SocketChannel clientChannel = (SocketChannel)key.channel();
+        SocketChannel clientChannel = (SocketChannel) key.channel();
         buffer.clear();
         while (true) {
             try {
